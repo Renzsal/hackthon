@@ -17,6 +17,8 @@ import {
 } from "@dainprotocol/utils";
 import { toEditorSettings } from "typescript";
 
+
+
 const port = Number(process.env.PORT) || 2022;
 const apiKey = '6ca0b6efffe246cda90e204dc02085e6';
 
@@ -184,15 +186,66 @@ dainService.startNode({ port: port }).then(({ address }) => {
 const getFunRecWidget: ServicePinnable = {
   id: "funRec",
   name: "Recreation Activities",
-  description: "Shows available recreational activities",
+  description: "Find fun activities in any location",
   type: "widget",
   label: "Recreation",
   icon: "map",
 
   getWidget: async () => {
+    // Build search form UI
+    const formUI = new FormUIBuilder()
+      .title("Find Recreation")
+      .addField({
+        name: "location",
+        label: "Enter a location",
+        type: "string",
+        required: true
+      })
+      .onSubmit({
+        tool: "fetch-recreation",
+        paramSchema: { location: { type: "string" } }
+      })
+      .build();
+
+    return new DainResponse({
+      text: "Search for recreation activities",
+      data: null,
+      ui: new CardUIBuilder()
+        .title("Recreation Finder")
+        .addChild(new AlertUIBuilder().variant("info").message("Enter a location to find activities!").build())
+        .addChild(formUI)
+        .build()
+    });
+  }
+};
+
+// Tool to handle form submission
+const fetchRecreationTool: ToolConfig = {
+  id: "fetch-recreation",
+  name: "Fetch Recreation Data",
+  description: "Gets recreational activities for a given location",
+  input: { location: "string" },
+  output: { results: "array" },
+  handler: async ({ location }) => {
     try {
-      // Fetch recreation data
-      const recResults = await fetchRecreationData();
+      // Replace the recursive call with an actual API call or function to fetch recreation data
+      const response = await axios.get<GeoapifyResponse>(
+        `https://api.geoapify.com/v2/places?text=${location}&categories=tourism,leisure&limit=10&apiKey=${apiKey}`
+      );
+
+      const recResults = response.data.features.map((place) => ({
+        name: place.properties.name || "unknown",
+        location: place.properties.formatted,
+        cost: "N/A", // Assuming cost is not provided in the response
+      }));
+
+      if (!recResults.length) {
+        return new DainResponse({
+          text: "No activities found",
+          data: [],
+          ui: new AlertUIBuilder().variant("warning").message(`No activities found for ${location}.`).build()
+        });
+      }
 
       // Recreation Table UI
       const recTableUI = new TableUIBuilder()
@@ -210,38 +263,25 @@ const getFunRecWidget: ServicePinnable = {
             type: ""
           }
         ])
-        .rows(recResults);
-
-      // Compose UI Layout
-      const cardUI = new CardUIBuilder()
-        .title("Recreation Activities")
-        .addChild(new AlertUIBuilder().variant("info").message("Explore fun activities near you!").build())
-        .addChild(recTableUI.build());
+        .rows(recResults)
+        .build();
 
       return new DainResponse({
-        text: "Recreation data loaded",
+        text: `Recreation activities in ${location}`,
         data: recResults,
-        ui: cardUI.build()
+        ui: new CardUIBuilder()
+          .title(`Recreation in ${location}`)
+          .addChild(new AlertUIBuilder().variant("success").message(`Showing activities for ${location}`).build())
+          .addChild(recTableUI)
+          .build()
       });
 
     } catch (error) {
       return new DainResponse({
-        text: "Failed to load recreation data",
+        text: "Error fetching recreation data",
         data: null,
-        ui: new AlertUIBuilder()
-          .variant("error")
-          .message("Unable to load activities. Please try again later.")
-          .build()
+        ui: new AlertUIBuilder().variant("error").message("Failed to load activities. Try again later.").build()
       });
     }
   }
 };
-
-async function fetchRecreationData(): Promise<Record<string, unknown>[]> {
-  // Mock data for demonstration purposes
-  return [
-    { name: "Hiking", location: "Mountain Trail", cost: 0 },
-    { name: "Museum Visit", location: "City Museum", cost: 15 },
-    { name: "Concert", location: "Downtown Arena", cost: 50 },
-  ];
-}

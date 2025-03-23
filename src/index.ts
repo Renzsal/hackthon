@@ -15,6 +15,7 @@ import {
   ChartUIBuilder,
   FormUIBuilder
 } from "@dainprotocol/utils";
+import { toEditorSettings } from "typescript";
 
 const port = Number(process.env.PORT) || 2022;
 const apiKey = '6ca0b6efffe246cda90e204dc02085e6';

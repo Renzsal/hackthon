@@ -3,7 +3,7 @@
 import { z } from "zod";
 import axios from "axios";
 
-import { defineDAINService, ToolConfig } from "@dainprotocol/service-sdk";
+import { defineDAINService, ServicePinnable, ToolConfig } from "@dainprotocol/service-sdk";
 
 import {
   DainResponse,
@@ -12,6 +12,8 @@ import {
   TableUIBuilder,
   MapUIBuilder,
   LayoutUIBuilder,
+  ChartUIBuilder,
+  FormUIBuilder
 } from "@dainprotocol/utils";
 
 const port = Number(process.env.PORT) || 2022;
@@ -147,106 +149,7 @@ const createSearchResponse = (results: any) => {
     ui: cardUI
   });
 };
-// const getWeatherForecastConfig: ToolConfig = {
-//   id: "get-weather-forecast",
-//   name: "Get Weather Forecast",
-//   description: "Fetches hourly weather forecast",
-//   input: z
-//     .object({
-//       locationName: z.string().describe("Location name"),
-//       latitude: z.number().describe("Latitude coordinate"),
-//       longitude: z.number().describe("Longitude coordinate"),
-//     })
-//     .describe("Input parameters for the forecast request"),
-//   output: z
-//     .object({
-//       times: z.array(z.string()).describe("Forecast times"),
-//       temperatures: z
-//         .array(z.number())
-//         .describe("Temperature forecasts in Celsius"),
-//       windSpeeds: z.array(z.number()).describe("Wind speed forecasts in km/h"),
-//       humidity: z
-//         .array(z.number())
-//         .describe("Relative humidity forecasts in %"),
-//     })
-//     .describe("Hourly weather forecast"),
-//   pricing: { pricePerUse: 0, currency: "USD" },
-//   handler: async (
-//     { locationName, latitude, longitude },
-//     agentInfo,
-//     context
-//   ) => {
-//     console.log(
-//       `User / Agent ${agentInfo.id} requested forecast at ${locationName} (${latitude},${longitude})`
-//     );
 
-//     const response = await axios.get(
-//       `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m`
-//     );
-
-//     const { time, temperature_2m, wind_speed_10m, relative_humidity_2m } =
-//       response.data.hourly;
-
-//     // Limit to first 24 hours of forecast data
-//     const limitedTime = time.slice(0, 24);
-//     const limitedTemp = temperature_2m.slice(0, 24);
-//     const limitedWind = wind_speed_10m.slice(0, 24);
-//     const limitedHumidity = relative_humidity_2m.slice(0, 24);
-
-//     const weatherEmoji = getWeatherEmoji(limitedTemp[0]);
-
-//     return {
-//       text: `Weather forecast for ${locationName} available for the next 24 hours`,
-//       data: {
-//         times: limitedTime,
-//         temperatures: limitedTemp,
-//         windSpeeds: limitedWind,
-//         humidity: limitedHumidity,
-//       },
-//       ui: new LayoutUIBuilder()
-//         .setRenderMode("page")
-//         .setLayoutType("column")
-//         .addChild(
-//           new MapUIBuilder()
-//             .setInitialView(latitude, longitude, 10)
-//             .setMapStyle("mapbox://styles/mapbox/streets-v12")
-//             .addMarkers([
-//               {
-//                 latitude,
-//                 longitude,
-//                 title: locationName,
-//                 description: `Temperature: ${limitedTemp[0]}°C\nWind: ${limitedWind[0]} km/h`,
-//                 text: `${locationName} ${weatherEmoji}`,
-//               },
-//             ])
-//             .build()
-//         )
-//         .addChild(
-//           new TableUIBuilder()
-//             .addColumns([
-//               { key: "time", header: "Time", type: "string" },
-//               {
-//                 key: "temperature",
-//                 header: "Temperature (°C)",
-//                 type: "number",
-//               },
-//               { key: "windSpeed", header: "Wind Speed (km/h)", type: "number" },
-//               { key: "humidity", header: "Humidity (%)", type: "number" },
-//             ])
-//             .rows(
-//               limitedTime.map((t: string, i: number) => ({
-//                 time: new Date(t).toLocaleString(),
-//                 temperature: limitedTemp[i],
-//                 windSpeed: limitedWind[i],
-//                 humidity: limitedHumidity[i],
-//               }))
-//             )
-//             .build()
-//         )
-//         .build(),
-//     };
-//   },
-// };
 const dainService = defineDAINService({
   metadata: {
     title: "FunRec DAIN Service",
@@ -276,3 +179,68 @@ const dainService = defineDAINService({
 dainService.startNode({ port: port }).then(({ address }) => {
   console.log("FunRec DAIN Service is running at :" + address().port);
 });
+
+const getFunRecWidget: ServicePinnable = {
+  id: "funRec",
+  name: "Recreation Activities",
+  description: "Shows available recreational activities",
+  type: "widget",
+  label: "Recreation",
+  icon: "map",
+
+  getWidget: async () => {
+    try {
+      // Fetch recreation data
+      const recResults = await fetchRecreationData();
+
+      // Recreation Table UI
+      const recTableUI = new TableUIBuilder()
+        .addColumns([
+          {
+            key: "name", header: "Activity",
+            type: ""
+          },
+          {
+            key: "location", header: "Location",
+            type: ""
+          },
+          {
+            key: "cost", header: "Cost ($)",
+            type: ""
+          }
+        ])
+        .rows(recResults);
+
+      // Compose UI Layout
+      const cardUI = new CardUIBuilder()
+        .title("Recreation Activities")
+        .addChild(new AlertUIBuilder().variant("info").message("Explore fun activities near you!").build())
+        .addChild(recTableUI.build());
+
+      return new DainResponse({
+        text: "Recreation data loaded",
+        data: recResults,
+        ui: cardUI.build()
+      });
+
+    } catch (error) {
+      return new DainResponse({
+        text: "Failed to load recreation data",
+        data: null,
+        ui: new AlertUIBuilder()
+          .variant("error")
+          .message("Unable to load activities. Please try again later.")
+          .build()
+      });
+    }
+  }
+};
+
+async function fetchRecreationData(): Promise<Record<string, unknown>[]> {
+  // Mock data for demonstration purposes
+  return [
+    { name: "Hiking", location: "Mountain Trail", cost: 0 },
+    { name: "Museum Visit", location: "City Museum", cost: 15 },
+    { name: "Concert", location: "Downtown Arena", cost: 50 },
+  ];
+}
